@@ -458,6 +458,31 @@ function initMap(){
       paint:{'line-color':'#c8f542','line-width':1,'line-dasharray':[2,2]}
     });
 
+    // 독도/울릉도 마커
+    const islands = [
+      { lng:131.8647, lat:37.4877, name:'울릉도' },
+      { lng:131.8652, lat:37.2426, name:'독도 🇰🇷' },
+    ];
+    islands.forEach(island=>{
+      const el = document.createElement('div');
+      el.style.cssText = `
+        background:var(--accent);
+        color:#0a0a0a;
+        font-family:var(--font-mono);
+        font-size:9px;
+        font-weight:700;
+        padding:3px 6px;
+        border-radius:4px;
+        white-space:nowrap;
+        cursor:pointer;
+        border:1px solid rgba(200,245,66,.6);
+      `;
+      el.textContent = island.name;
+      new mapboxgl.Marker({element:el, anchor:'bottom'})
+        .setLngLat([island.lng, island.lat])
+        .addTo(map);
+    });
+
     // 클릭 이벤트
     map.on('click', handleMapClick);
     map.on('mousemove', e=>{
