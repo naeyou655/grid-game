@@ -196,6 +196,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
           <div class="stat-row"><span>이벤트 존</span><span id="si-ev">0</span></div>
           <div class="stat-row"><span>채굴 속도</span><span id="si-speed">0.00 pt/s</span></div>
           <div class="stat-row"><span>대기 포인트</span><span id="si-pend">0.00</span></div>
+          <div class="stat-row"><span>오늘 채굴</span><span id="si-cap">0 / 20 pt</span></div>
           <button class="accent-btn" id="btn-collect">포인트 수령 🪙</button>
           <div class="section-title" style="margin-top:14px">순위</div>
           <div id="leaderboard"></div>
@@ -631,7 +632,7 @@ async function handleMapClick(e){
 
   const isEv=px&&px.isEvent;
   document.getElementById('p-ev-row').style.display=isEv?'flex':'none';
-  document.getElementById('p-speed').textContent=isEv?'0.02 pt/s':'0.01 pt/s';
+  document.getElementById('p-speed').textContent=isEv?'0.002 pt/s':'0.001 pt/s';
 
   const claimBtn=document.getElementById('popup-claim');
   if(!px||!px.uid){
@@ -681,7 +682,23 @@ async function claimPixel(col,row){
     batch.update(doc(db,'users',uid),{energy:increment(-1),territory:increment(1)});
     await batch.commit();
 
-    if(isEv) toast('이벤트 존 점령! 채굴 2배 🎉');
+    // 영토 10칸 달성 보너스
+    const myCount=getMyPixels().length;
+    if(myCount===10){
+      const todayKey=getTodayKey();
+      const mSnap=await getDoc(doc(db,'users',uid));
+      const mData=mSnap.data()||{};
+      const dailyMined=mData.dailyKey===todayKey?(mData.dailyMined||0):0;
+      const bonus=Math.min(3, DAILY_CAP-dailyMined);
+      if(bonus>0){
+        await updateDoc(doc(db,'users',uid),{
+          points:increment(bonus), totalMined:increment(bonus),
+          dailyMined:increment(bonus), dailyKey:todayKey,
+        });
+        toast('🎉 영토 10칸 달성! +3pt 보너스!');
+        addFeed('영토 10칸 달성 보너스 +3pt 획득!','#c8f542');
+      }
+    } else if(isEv) toast('이벤트 존 점령! 채굴 2배 🎉');
     else toast(`(${col},${row}) 점령 성공!`);
     addFeed(`(${col},${row}) 좌표를 점령했습니다.${isEv?' 이벤트 존!':''}`, userColor);
     // global feed
@@ -731,8 +748,17 @@ function updateHUD(){
   document.getElementById('s-pts').textContent=points.toFixed(2);
   document.getElementById('si-terr').textContent=terr+' 칸';
   document.getElementById('si-ev').textContent=evCnt+' 칸';
-  document.getElementById('si-speed').textContent=speed.toFixed(2)+' pt/s';
+  document.getElementById('si-speed').textContent=speed.toFixed(3)+' pt/s';
   document.getElementById('si-pend').textContent=pending.toFixed(2);
+  // 일일 캡 표시
+  const siCap=document.getElementById('si-cap');
+  if(siCap){
+    getDoc(doc(db,'users',uid)).then(s=>{
+      const d=s.data()||{};
+      const dm=d.dailyKey===getTodayKey()?(d.dailyMined||0):0;
+      siCap.textContent=`${dm.toFixed(1)} / ${DAILY_CAP} pt`;
+    });
+  }
   document.getElementById('pr-terr').textContent=terr+' 블록';
   document.getElementById('pr-pts').textContent=points.toFixed(2);
   document.getElementById('pr-mined').textContent=totalMined.toFixed(2);
@@ -740,19 +766,45 @@ function updateHUD(){
 }
 
 // ── MINING ─────────────────────────────────────────────────
+const DAILY_CAP = 20; // 하루 최대 채굴 20pt
+
+function getTodayKey(){
+  const d=new Date();
+  return `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`;
+}
+
+async function getDailyMined(){
+  const snap=await getDoc(doc(db,'users',uid));
+  if(!snap.exists()) return 0;
+  const d=snap.data();
+  if(d.dailyKey!==getTodayKey()) return 0;
+  return d.dailyMined||0;
+}
+
 function startMining(){
   setInterval(async()=>{
     const my=getMyPixels();
     if(!my.length) return;
+
+    // 일일 캡 체크
+    const todayKey=getTodayKey();
+    const snap=await getDoc(doc(db,'users',uid));
+    const userData=snap.data()||{};
+    const dailyMined = userData.dailyKey===todayKey ? (userData.dailyMined||0) : 0;
+    if(dailyMined>=DAILY_CAP) return; // 오늘 캡 도달
+
     const evCnt=my.filter(p=>p.isEvent).length;
-    const gain=(((my.length-evCnt)*0.01+evCnt*0.02)/60);
+    const gain=(((my.length-evCnt)*0.001+evCnt*0.002)/60);
     pending+=gain;
+
     if(pending>=0.5){
-      const add=parseFloat(pending.toFixed(2));
+      const add=Math.min(parseFloat(pending.toFixed(2)), DAILY_CAP-dailyMined);
       pending=0;
       await updateDoc(doc(db,'users',uid),{
         points:increment(add), totalMined:increment(add),
-        pending:0, territory:my.length
+        pending:0, territory:my.length,
+        dailyMined:increment(add),
+        dailyKey:todayKey,
       });
     }
     updateHUD();
@@ -785,9 +837,24 @@ document.getElementById('btn-checkin').addEventListener('click',async()=>{
   const now=Date.now();
   if(now-lastCheckin<5000){toast('잠시 후 다시 (데모: 5초)');return;}
   lastCheckin=now;
-  await updateDoc(doc(db,'users',uid),{energy:increment(1),streak:increment(1),lastCheckin:now});
-  toast('출석 완료! ⚡ +1');
-  addFeed('출석 체크 — 에너지 +1','#c8f542');
+  const todayKey=getTodayKey();
+  const cSnap=await getDoc(doc(db,'users',uid));
+  const cData=cSnap.data()||{};
+  const curStreak=(cData.streak||1)+1;
+  const streakBonus=curStreak>0&&curStreak%7===0?5:0; // 7일 연속 +5pt
+  const checkinBonus=2; // 출석 +2pt
+  const totalBonus=checkinBonus+streakBonus;
+  const dailyMined=cData.dailyKey===todayKey?(cData.dailyMined||0):0;
+  const actualBonus=Math.min(totalBonus, DAILY_CAP-dailyMined);
+
+  await updateDoc(doc(db,'users',uid),{
+    energy:increment(1), streak:increment(1), lastCheckin:now,
+    points:increment(actualBonus), totalMined:increment(actualBonus),
+    dailyMined:increment(actualBonus), dailyKey:todayKey,
+  });
+  const msg=streakBonus>0?`출석 완료! ⚡ +1 🎉 ${curStreak}일 연속 보너스 +${totalBonus}pt`:`출석 완료! ⚡ +1  +${actualBonus}pt`;
+  toast(msg);
+  addFeed(msg,'#c8f542');
   refreshHints();
 });
 
