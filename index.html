@@ -409,8 +409,10 @@ function initMap(){
     style:'mapbox://styles/mapbox/dark-v11',
     center:[127.5, 36.0],
     zoom:6,
-    minZoom:5, maxZoom:14,
+    minZoom:5, maxZoom:16,
+    attributionControl:false,
   });
+  map.addControl(new mapboxgl.AttributionControl({compact:true}));
 
   map.on('load', ()=>{
     // 픽셀 레이어 소스 (GeoJSON)
@@ -537,9 +539,8 @@ function loadViewportPixels(){
     if(!map) return;
     const bounds=map.getBounds();
     const zoom=map.getZoom();
-    // 줌 낮으면 로드 안 함 (성능)
-    if(zoom<7){
-      // 줌 낮을 때는 기존 데이터만 표시
+    // 줌 8 미만에서는 내 픽셀만 표시 (성능)
+    if(zoom<8){
       refreshMapData(); return;
     }
     const {col:c0,row:r0}=lnglatToGrid(bounds.getWest(),bounds.getNorth());
@@ -569,10 +570,33 @@ function loadViewportPixels(){
   }, 300);
 }
 
+// ── 대한민국 영토 검증 ────────────────────────────────────
+async function isInSouthKorea(lng, lat){
+  // 기본 bbox 체크 (북한 위도 37.7 이상 제외, 대략적)
+  if(lat > 38.6) return false; // 북한 영역
+  if(lat < 33.0 || lat > 38.7) return false;
+  if(lng < 124.5 || lng > 130.5) return false;
+  // Mapbox Geocoding으로 정확한 국가 확인
+  try {
+    const res = await fetch(
+      `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?types=country&access_token=${mapboxgl.accessToken}`
+    );
+    const data = await res.json();
+    const country = data.features?.[0]?.properties?.short_code;
+    return country === 'kr';
+  } catch(e) {
+    // API 실패 시 bbox만으로 판단
+    return true;
+  }
+}
+
 // ── MAP CLICK ──────────────────────────────────────────────
-function handleMapClick(e){
+async function handleMapClick(e){
   const {col,row}=lnglatToGrid(e.lngLat.lng,e.lngLat.lat);
   if(col<0||col>=GRID_COLS||row<0||row>=GRID_ROWS) return;
+  // 대한민국 영토 검증
+  const inKorea = await isInSouthKorea(e.lngLat.lng, e.lngLat.lat);
+  if(!inKorea){ toast('대한민국 영토만 점령할 수 있어요 🇰🇷'); return; }
   const key=gridKey(col,row);
   const px=pixelMap[key];
   selectedPixel={col,row,key,lng:e.lngLat.lng,lat:e.lngLat.lat};
