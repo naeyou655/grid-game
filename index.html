@@ -304,6 +304,28 @@ function gridToLnglat(col, row) {
 }
 function gridKey(col, row) { return `${col}_${row}`; }
 
+// ── GRID LINE BUILDER ─────────────────────────────────────
+function buildGridLines(){
+  const features=[];
+  // 위도선 (가로)
+  for(let row=0;row<=GRID_ROWS;row++){
+    const lat=KR.latMax-row*LAT_STEP;
+    features.push({
+      type:'Feature',
+      geometry:{type:'LineString',coordinates:[[KR.lngMin,lat],[KR.lngMax,lat]]}
+    });
+  }
+  // 경도선 (세로)
+  for(let col=0;col<=GRID_COLS;col++){
+    const lng=KR.lngMin+col*LNG_STEP;
+    features.push({
+      type:'Feature',
+      geometry:{type:'LineString',coordinates:[[lng,KR.latMax],[lng,KR.latMin]]}
+    });
+  }
+  return {type:'FeatureCollection',features};
+}
+
 // ── APP STATE ──────────────────────────────────────────────
 const PALETTE = [
   {c:'#c8f542',n:'라임'},{c:'#42f5c8',n:'민트'},{c:'#f5c842',n:'골드'},
@@ -429,7 +451,7 @@ function initMap(){
       source:'pixels',
       paint:{
         'fill-color':['get','color'],
-        'fill-opacity':['case',['==',['get','isEvent'],true],0.35,0.65]
+        'fill-opacity':['case',['==',['get','isEvent'],true],0.4,0.75]
       }
     });
 
@@ -442,6 +464,19 @@ function initMap(){
         'line-color':['case',['==',['get','uid'],uid||''],'#c8f542','rgba(255,255,255,0.1)'],
         'line-width':['case',['==',['get','uid'],uid||''],1,0.3]
       }
+    });
+
+    // 그리드 라인 레이어 (항상 표시)
+    map.addSource('grid-lines',{type:'geojson',data:buildGridLines()});
+    map.addLayer({
+      id:'grid-lines-layer',
+      type:'line',
+      source:'grid-lines',
+      paint:{
+        'line-color':'rgba(200,245,66,0.12)',
+        'line-width':0.5,
+      },
+      minzoom:7,
     });
 
     // 확장 가능 힌트 레이어
