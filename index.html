@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>GRID — 픽셀 부동산</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet">
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
+<style>
+:root{
+  --bg:#0a0a0a;--surface:#111;--surface2:#1a1a1a;
+  --border:#2a2a2a;--border2:#333;--text:#e8e8e2;
+  --text2:#888880;--text3:#555550;
+  --accent:#c8f542;--accent2:#9fcf28;--event:#42f5c8;
+  --font-mono:'Space Mono',monospace;--font-body:'Noto Sans KR',sans-serif;--r:6px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font-body);overflow:hidden;}
+
+/* AUTH */
+#auth-screen{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;gap:20px;}
+#auth-screen h1{font-family:var(--font-mono);font-size:32px;font-weight:700;letter-spacing:.25em;color:var(--accent);}
+#auth-screen p{font-size:13px;color:var(--text2);}
+#btn-google{display:flex;align-items:center;gap:10px;background:none;border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:var(--font-body);font-size:14px;padding:12px 24px;cursor:pointer;transition:border-color .15s;}
+#btn-google:hover{border-color:var(--accent);color:var(--accent);}
+#loading-msg{font-size:12px;color:var(--text3);font-family:var(--font-mono);text-align:center;max-width:280px;line-height:1.6;}
+
+/* APP */
+#app{display:none;flex-direction:column;height:100vh;}
+#app.ready{display:flex;}
+#topbar{display:flex;align-items:center;padding:0 14px;border-bottom:1px solid var(--border);gap:8px;background:var(--surface);height:48px;flex-shrink:0;}
+#logo{font-family:var(--font-mono);font-size:13px;font-weight:700;letter-spacing:.2em;color:var(--accent);margin-right:auto;}
+.chip{display:flex;align-items:center;gap:4px;background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:3px 9px;font-size:11px;color:var(--text2);}
+.chip b{font-weight:500;color:var(--text);font-family:var(--font-mono);}
+.user-av{width:26px;height:26px;border-radius:50%;border:1px solid var(--border2);object-fit:cover;cursor:pointer;}
+
+#main{display:flex;flex:1;overflow:hidden;}
+#map-wrap{flex:1;position:relative;}
+#map{position:absolute;inset:0;}
+
+/* SIDEBAR */
+#sidebar{width:260px;border-left:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;}
+.sidebar-tab{display:none;flex:1;flex-direction:column;overflow:hidden;}
+.sidebar-tab.active{display:flex;}
+.tab-head{padding:12px 14px 8px;border-bottom:1px solid var(--border);font-size:10px;font-family:var(--font-mono);letter-spacing:.1em;color:var(--text2);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;}
+.online-badge{font-size:10px;color:var(--accent);display:flex;align-items:center;gap:3px;}
+.online-dot{width:5px;height:5px;border-radius:50%;background:var(--accent);animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
+.tab-body{flex:1;overflow-y:auto;padding:10px;}
+.tab-body::-webkit-scrollbar{width:3px;}
+.tab-body::-webkit-scrollbar-thumb{background:var(--border2);}
+
+/* MAP CONTROLS */
+.map-controls{position:absolute;top:10px;right:10px;display:flex;flex-direction:column;gap:5px;z-index:10;}
+.map-btn{width:32px;height:32px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:var(--font-mono);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:border-color .15s,color .15s;}
+.map-btn:hover{border-color:var(--accent);color:var(--accent);}
+.map-info{position:absolute;bottom:10px;left:10px;font-family:var(--font-mono);font-size:10px;color:var(--text3);background:rgba(10,10,10,.85);padding:4px 8px;border-radius:4px;pointer-events:none;z-index:10;line-height:1.6;}
+
+/* POPUP */
+#popup-wrap{position:absolute;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:50;}
+#popup-wrap.open{display:flex;}
+#popup{background:var(--surface);border:1px solid var(--border2);border-radius:10px;width:230px;padding:16px;}
+#popup h3{font-size:11px;font-family:var(--font-mono);letter-spacing:.1em;color:var(--text2);margin-bottom:10px;}
+.popup-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px;}
+.popup-row:last-of-type{border:none;}
+.popup-row span{color:var(--text2);}
+.popup-row b{color:var(--text);font-weight:500;font-family:var(--font-mono);font-size:11px;}
+.ev-badge{font-size:10px;padding:2px 7px;border-radius:10px;background:rgba(66,245,200,.15);color:var(--event);border:1px solid rgba(66,245,200,.3);}
+#popup-claim{width:100%;margin-top:10px;background:rgba(200,245,66,.12);border:1px solid rgba(200,245,66,.4);border-radius:var(--r);color:var(--accent);font-family:var(--font-body);font-size:12px;padding:8px;cursor:pointer;transition:background .15s;display:none;}
+#popup-claim:hover{background:rgba(200,245,66,.2);}
+#popup-close{width:100%;margin-top:6px;background:none;border:1px solid var(--border2);border-radius:var(--r);color:var(--text2);font-family:var(--font-body);font-size:12px;padding:7px;cursor:pointer;}
+#popup-close:hover{border-color:var(--text2);}
+
+/* SIDEBAR ELEMENTS */
+.section-title{font-size:10px;font-family:var(--font-mono);color:var(--text3);letter-spacing:.1em;margin:10px 0 5px;}
+.section-title:first-child{margin-top:0;}
+.stat-row{display:flex;justify-content:space-between;font-size:11px;padding:5px 0;border-bottom:1px solid var(--border);}
+.stat-row:last-child{border:none;}
+.stat-row span:first-child{color:var(--text2);}
+.stat-row span:last-child{font-family:var(--font-mono);font-size:10px;color:var(--text);}
+.action-btn{width:100%;margin-top:8px;background:none;border:1px solid var(--border2);border-radius:var(--r);color:var(--text2);font-family:var(--font-body);font-size:11px;padding:8px;cursor:pointer;transition:all .15s;}
+.action-btn:hover{border-color:var(--text2);color:var(--text);}
+.accent-btn{width:100%;margin-top:8px;background:rgba(200,245,66,.1);border:1px solid rgba(200,245,66,.4);border-radius:var(--r);color:var(--accent);font-family:var(--font-body);font-size:11px;padding:8px;cursor:pointer;font-weight:500;transition:background .15s;}
+.accent-btn:hover{background:rgba(200,245,66,.18);}
+
+/* SHOP */
+.shop-item{background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:9px 10px;margin-bottom:5px;}
+.shop-item-head{display:flex;justify-content:space-between;margin-bottom:5px;}
+.shop-item-name{font-size:12px;font-weight:500;}
+.shop-price{font-family:var(--font-mono);font-size:10px;color:var(--accent);}
+.shop-desc{font-size:10px;color:var(--text3);margin-bottom:6px;}
+.shop-btn{width:100%;background:none;border:1px solid var(--border2);border-radius:4px;color:var(--text2);font-size:10px;padding:4px;cursor:pointer;transition:all .15s;font-family:var(--font-body);}
+.shop-btn:hover{border-color:var(--accent);color:var(--accent);}
+.shop-btn.owned{border-color:rgba(200,245,66,.4);color:var(--accent);}
+.skin-prev{height:16px;border-radius:3px;margin-bottom:6px;}
+
+/* FEED */
+.feed-item{display:flex;gap:7px;padding:7px 0;border-bottom:1px solid var(--border);}
+.feed-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0;margin-top:4px;}
+.feed-text{font-size:11px;color:var(--text2);line-height:1.5;flex:1;}
+.feed-time{font-size:10px;color:var(--text3);font-family:var(--font-mono);margin-top:2px;}
+
+/* RANK */
+.rank-row{display:flex;align-items:center;gap:7px;padding:6px 0;border-bottom:1px solid var(--border);font-size:11px;}
+.rank-num{font-family:var(--font-mono);font-size:10px;color:var(--text3);width:16px;flex-shrink:0;}
+.rank-dot{width:7px;height:7px;border-radius:2px;flex-shrink:0;}
+.rank-name{flex:1;color:var(--text2);}
+.rank-name.me{color:var(--accent);}
+.rank-score{font-family:var(--font-mono);font-size:10px;}
+
+/* COLOR PICKER */
+.color-grid{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;}
+.color-opt{width:20px;height:20px;border-radius:3px;cursor:pointer;border:2px solid transparent;transition:border-color .1s,transform .1s;}
+.color-opt:hover{transform:scale(1.1);}
+.color-opt.sel{border-color:var(--text);}
+
+/* PROFILE */
+.profile-header{display:flex;align-items:center;gap:9px;padding:10px;background:var(--surface2);border-radius:var(--r);margin-bottom:8px;border:1px solid var(--border);}
+.p-avatar{width:36px;height:36px;border-radius:50%;object-fit:cover;border:1px solid var(--border2);}
+
+/* NAVBAR */
+#navbar{display:flex;border-top:1px solid var(--border);background:var(--surface);flex-shrink:0;}
+.nav-btn{flex:1;background:none;border:none;color:var(--text3);font-family:var(--font-body);font-size:10px;padding:7px 0;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;transition:color .15s;}
+.nav-btn svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.5;}
+.nav-btn.active{color:var(--accent);}
+
+/* TOAST */
+#toast{position:fixed;bottom:60px;left:50%;transform:translateX(-50%);background:var(--surface);border:1px solid var(--border2);border-radius:var(--r);padding:7px 16px;font-size:11px;color:var(--text);white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .2s;z-index:999;font-family:var(--font-mono);}
+#toast.show{opacity:1;}
+
+*{scrollbar-width:thin;scrollbar-color:var(--border2) transparent;}
+</style>
+</head>
+<body>
+
+<!-- AUTH -->
+<div id="auth-screen">
+  <h1>GRID</h1>
+  <p>대한민국 픽셀 부동산</p>
+  <button id="btn-google">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+    </svg>
+    Google로 시작하기
+  </button>
+  <div id="loading-msg"></div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div id="topbar">
+    <span id="logo">GRID</span>
+    <div class="chip">영토 <b id="s-terr">0</b></div>
+    <div class="chip">⚡ <b id="s-nrg">3</b></div>
+    <div class="chip">🪙 <b id="s-pts">0.00</b></div>
+    <div id="topbar-av"></div>
+  </div>
+
+  <div id="main">
+    <!-- MAP -->
+    <div id="map-wrap">
+      <div id="map"></div>
+      <div class="map-controls">
+        <button class="map-btn" id="btn-my-loc" title="내 영토로">◎</button>
+        <button class="map-btn" id="btn-korea" title="전국 보기">🇰🇷</button>
+      </div>
+      <div class="map-info" id="map-info">줌: — | 픽셀: —</div>
+      <div id="popup-wrap">
+        <div id="popup">
+          <h3>픽셀 정보</h3>
+          <div class="popup-row"><span>좌표</span><b id="p-coord"></b></div>
+          <div class="popup-row"><span>위치</span><b id="p-loc"></b></div>
+          <div class="popup-row"><span>소유자</span><b id="p-owner"></b></div>
+          <div class="popup-row"><span>채굴 속도</span><b id="p-speed"></b></div>
+          <div class="popup-row" id="p-ev-row" style="display:none"><span>존 타입</span><span class="ev-badge">이벤트 ×2</span></div>
+          <button id="popup-claim">⚡ 이 땅 점령하기</button>
+          <button id="popup-close">닫기</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SIDEBAR -->
+    <div id="sidebar">
+      <div id="tab-map" class="sidebar-tab active">
+        <div class="tab-head">
+          현황
+          <span class="online-badge"><span class="online-dot"></span><span id="online-cnt">—</span></span>
+        </div>
+        <div class="tab-body">
+          <div class="section-title">내 영토</div>
+          <div class="stat-row"><span>보유 칸</span><span id="si-terr">0</span></div>
+          <div class="stat-row"><span>이벤트 존</span><span id="si-ev">0</span></div>
+          <div class="stat-row"><span>채굴 속도</span><span id="si-speed">0.00 pt/s</span></div>
+          <div class="stat-row"><span>대기 포인트</span><span id="si-pend">0.00</span></div>
+          <button class="accent-btn" id="btn-collect">포인트 수령 🪙</button>
+          <div class="section-title" style="margin-top:14px">순위</div>
+          <div id="leaderboard"></div>
+        </div>
+      </div>
+
+      <div id="tab-shop" class="sidebar-tab">
+        <div class="tab-head">POINT SHOP</div>
+        <div class="tab-body" id="shop-body"></div>
+      </div>
+
+      <div id="tab-feed" class="sidebar-tab">
+        <div class="tab-head">LOCAL FEED</div>
+        <div class="tab-body" id="feed-body"><div style="font-size:11px;color:var(--text3);padding:16px 0;text-align:center">활동 없음</div></div>
+      </div>
+
+      <div id="tab-profile" class="sidebar-tab">
+        <div class="tab-head">PROFILE</div>
+        <div class="tab-body">
+          <div class="profile-header">
+            <img id="prof-img" class="p-avatar" src="" alt="">
+            <div>
+              <div style="font-size:13px;font-weight:500" id="prof-name"></div>
+              <div style="font-size:10px;color:var(--text3)" id="prof-uid"></div>
+            </div>
+          </div>
+          <div class="stat-row"><span>영토</span><span id="pr-terr">0</span></div>
+          <div class="stat-row"><span>포인트</span><span id="pr-pts">0.00</span></div>
+          <div class="stat-row"><span>채굴량</span><span id="pr-mined">0.00</span></div>
+          <div class="stat-row"><span>연속 출석</span><span id="pr-streak">1일</span></div>
+          <div class="section-title" style="margin-top:12px">픽셀 컬러</div>
+          <div class="color-grid" id="color-grid"></div>
+          <button class="accent-btn" id="btn-checkin">출석 체크 ⚡ +1</button>
+          <button class="action-btn" id="btn-signout">로그아웃</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="navbar">
+    <button class="nav-btn active" data-tab="map">
+      <svg viewBox="0 0 24 24"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+      지도
+    </button>
+    <button class="nav-btn" data-tab="shop">
+      <svg viewBox="0 0 24 24"><path d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
+      숍
+    </button>
+    <button class="nav-btn" data-tab="feed">
+      <svg viewBox="0 0 24 24"><path d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10l6 6v8a2 2 0 01-2 2z"/></svg>
+      피드
+    </button>
+    <button class="nav-btn" data-tab="profile">
+      <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 3a4 4 0 100 8 4 4 0 000-8z"/></svg>
+      프로필
+    </button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- Firebase -->
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
+  from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js';
+import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot,
+  collection, query, orderBy, limit, where, serverTimestamp, writeBatch, increment, getDocs }
+  from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js';
+
+// ── FIREBASE CONFIG ────────────────────────────────────────
+const app = initializeApp({
+  apiKey:"AIzaSyCzd4oUbkLk57x81fMVMAdnUBUkXTrp72k",
+  authDomain:"grid-db184.firebaseapp.com",
+  projectId:"grid-db184",
+  storageBucket:"grid-db184.firebasestorage.app",
+  messagingSenderId:"549504098503",
+  appId:"1:549504098503:web:2b61894758cdcd75f19ee2"
+});
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+// ── MAPBOX ─────────────────────────────────────────────────
+mapboxgl.accessToken = 'pk.eyJ1Ijoic3Ryb25nNzExNyIsImEiOiJjbXBuZjRlOXUwZDlqMnhwbzk1OXN2dW93In0.Ado9KH97uG8YpMDqWmDiWA';
+
+// ── GRID CONSTANTS ─────────────────────────────────────────
+// 대한민국 경계 (1km×1km 그리드)
+const KR = { latMin:33.0, latMax:38.9, lngMin:125.0, lngMax:130.0 };
+const LAT_STEP = (KR.latMax - KR.latMin) / 654; // ~0.009도 ≈ 1km
+const LNG_STEP = (KR.lngMax - KR.lngMin) / 449; // ~0.011도 ≈ 1km
+const GRID_ROWS = 654, GRID_COLS = 449;
+
+// 위경도 → 그리드 좌표
+function lnglatToGrid(lng, lat) {
+  const col = Math.floor((lng - KR.lngMin) / LNG_STEP);
+  const row = Math.floor((KR.latMax - lat) / LAT_STEP);
+  return { col: Math.max(0, Math.min(GRID_COLS-1, col)),
+           row: Math.max(0, Math.min(GRID_ROWS-1, row)) };
+}
+// 그리드 → 위경도 (픽셀 중심)
+function gridToLnglat(col, row) {
+  const lng = KR.lngMin + (col + 0.5) * LNG_STEP;
+  const lat = KR.latMax - (row + 0.5) * LAT_STEP;
+  return [lng, lat];
+}
+function gridKey(col, row) { return `${col}_${row}`; }
+
+// ── APP STATE ──────────────────────────────────────────────
+const PALETTE = [
+  {c:'#c8f542',n:'라임'},{c:'#42f5c8',n:'민트'},{c:'#f5c842',n:'골드'},
+  {c:'#42c8f5',n:'스카이'},{c:'#f542c8',n:'핑크'},{c:'#c842f5',n:'퍼플'},
+  {c:'#f54242',n:'레드'},{c:'#f5f542',n:'옐로우'},
+];
+const GIFTS=[{n:'편의점 음료',d:'GS25/CU 교환권',p:300},{n:'아메리카노',d:'카페 교환권',p:500},{n:'치킨 할인',d:'배달 앱 1천원',p:1000},{n:'카페 음료',d:'스타벅스 1잔',p:2000}];
+const SKINS=[{n:'네온 민트',c:'#42f5c8',p:200},{n:'골드',c:'#f5c842',p:300},{n:'핫 핑크',c:'#f542c8',p:300},{n:'퍼플',c:'#c842f5',p:200}];
+
+let uid=null, userColor='#c8f542', activeSkin=null;
+let energy=3, points=0, pending=0, totalMined=0, streak=1, lastCheckin=0;
+let ownedSkins=new Set();
+let pixelMap={}; // key → {uid, color, isEvent, col, row}
+let colorMap={}, nickMap={};
+let feed=[];
+let map=null;
+let selectedPixel=null; // {col, row, key}
+let unsubUser=null, unsubLeader=null;
+let viewportUnsub=null;
+
+// ── AUTH ───────────────────────────────────────────────────
+document.getElementById('btn-google').addEventListener('click', async()=>{
+  setMsg('로그인 중...');
+  try { await signInWithPopup(auth, new GoogleAuthProvider()); }
+  catch(e){ setMsg('로그인 실패: '+e.message); }
+});
+document.getElementById('btn-signout').addEventListener('click',()=>signOut(auth));
+
+onAuthStateChanged(auth, async user=>{
+  if(user){
+    uid=user.uid;
+    document.getElementById('auth-screen').style.display='none';
+    document.getElementById('app').classList.add('ready');
+    await initUser(user);
+    initMap();
+    buildShop();
+    buildColorPicker();
+    startMining();
+  } else {
+    uid=null;
+    document.getElementById('auth-screen').style.display='flex';
+    document.getElementById('app').classList.remove('ready');
+    if(unsubUser) unsubUser();
+    if(unsubLeader) unsubLeader();
+    setMsg('');
+  }
+});
+function setMsg(m){document.getElementById('loading-msg').textContent=m;}
+
+// ── USER INIT ──────────────────────────────────────────────
+async function initUser(user){
+  const ref=doc(db,'users',uid);
+  const snap=await getDoc(ref);
+  if(!snap.exists()){
+    await setDoc(ref,{
+      displayName:user.displayName||'플레이어', photoURL:user.photoURL||'',
+      color:'#c8f542', energy:3, points:0, totalMined:0, pending:0,
+      streak:1, lastCheckin:0, territory:0, ownedSkins:[], activeSkin:null,
+      createdAt:serverTimestamp()
+    });
+    energy=3; points=0; totalMined=0; pending=0; streak=1; lastCheckin=0;
+    userColor='#c8f542'; activeSkin=null; ownedSkins=new Set();
+  } else {
+    const d=snap.data();
+    energy=d.energy||3; points=d.points||0; totalMined=d.totalMined||0;
+    pending=d.pending||0; streak=d.streak||1; lastCheckin=d.lastCheckin||0;
+    userColor=d.color||'#c8f542'; activeSkin=d.activeSkin||null;
+    ownedSkins=new Set(d.ownedSkins||[]);
+  }
+  colorMap[uid]=userColor; nickMap[uid]=user.displayName||'나';
+
+  const img=document.getElementById('prof-img');
+  img.src=user.photoURL||''; img.style.display=user.photoURL?'block':'none';
+  document.getElementById('prof-name').textContent=user.displayName||'플레이어';
+  document.getElementById('prof-uid').textContent='@'+uid.slice(0,8);
+  const av=document.getElementById('topbar-av');
+  if(user.photoURL) av.innerHTML=`<img src="${user.photoURL}" class="user-av">`;
+
+  // user doc listener
+  unsubUser=onSnapshot(ref, snap=>{
+    if(!snap.exists())return;
+    const d=snap.data();
+    energy=d.energy||0; points=d.points||0;
+    totalMined=d.totalMined||0; pending=d.pending||0;
+    streak=d.streak||1; lastCheckin=d.lastCheckin||0;
+    updateHUD();
+  });
+
+  // leaderboard
+  const lbQ=query(collection(db,'users'),orderBy('territory','desc'),limit(8));
+  unsubLeader=onSnapshot(lbQ, snap=>{
+    const rows=snap.docs.map(d=>({uid:d.id,...d.data()}));
+    rows.forEach(r=>{nickMap[r.uid]=r.displayName||'—';colorMap[r.uid]=r.color||'#888';});
+    renderLeaderboard(rows);
+  });
+
+  updateHUD();
+}
+
+// ── MAPBOX INIT ────────────────────────────────────────────
+function initMap(){
+  map = new mapboxgl.Map({
+    container:'map',
+    style:'mapbox://styles/mapbox/dark-v11',
+    center:[127.5, 36.0],
+    zoom:6,
+    minZoom:5, maxZoom:14,
+  });
+
+  map.on('load', ()=>{
+    // 픽셀 레이어 소스 (GeoJSON)
+    map.addSource('pixels', {
+      type:'geojson',
+      data:{ type:'FeatureCollection', features:[] }
+    });
+
+    // 채워진 픽셀
+    map.addLayer({
+      id:'pixels-fill',
+      type:'fill',
+      source:'pixels',
+      paint:{
+        'fill-color':['get','color'],
+        'fill-opacity':['case',['==',['get','isEvent'],true],0.35,0.65]
+      }
+    });
+
+    // 픽셀 테두리
+    map.addLayer({
+      id:'pixels-border',
+      type:'line',
+      source:'pixels',
+      paint:{
+        'line-color':['case',['==',['get','uid'],uid||''],'#c8f542','rgba(255,255,255,0.1)'],
+        'line-width':['case',['==',['get','uid'],uid||''],1,0.3]
+      }
+    });
+
+    // 확장 가능 힌트 레이어
+    map.addSource('hints',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
+    map.addLayer({
+      id:'hints-fill',
+      type:'fill',
+      source:'hints',
+      paint:{'fill-color':'#c8f542','fill-opacity':0.12}
+    });
+    map.addLayer({
+      id:'hints-border',
+      type:'line',
+      source:'hints',
+      paint:{'line-color':'#c8f542','line-width':1,'line-dasharray':[2,2]}
+    });
+
+    // 클릭 이벤트
+    map.on('click', handleMapClick);
+    map.on('mousemove', e=>{
+      const {col,row}=lnglatToGrid(e.lngLat.lng, e.lngLat.lat);
+      document.getElementById('map-info').textContent=`줌: ${map.getZoom().toFixed(1)} | 픽셀: (${col},${row})`;
+    });
+
+    // 뷰포트 변경시 픽셀 로드
+    map.on('moveend', loadViewportPixels);
+    map.on('zoomend', loadViewportPixels);
+    loadViewportPixels();
+
+    // 내 영토 초기 위치로
+    const myCells=getMyPixels();
+    if(myCells.length){
+      const [lng,lat]=gridToLnglat(myCells[0].col,myCells[0].row);
+      map.flyTo({center:[lng,lat],zoom:10});
+    }
+  });
+}
+
+// ── PIXEL TO GEOJSON ───────────────────────────────────────
+function pixelToFeature(col, row, data){
+  const lng0=KR.lngMin+col*LNG_STEP, lat0=KR.latMax-row*LAT_STEP;
+  const lng1=lng0+LNG_STEP, lat1=lat0-LAT_STEP;
+  return {
+    type:'Feature',
+    id: col*10000+row,
+    properties:{
+      key:gridKey(col,row), col, row,
+      uid:data.uid||null,
+      color:data.uid?(data.uid===uid?(activeSkin||userColor):(data.color||'#888')):
+            (data.isEvent?'#42f5c8':'#333'),
+      isEvent:data.isEvent||false,
+    },
+    geometry:{
+      type:'Polygon',
+      coordinates:[[[lng0,lat0],[lng1,lat0],[lng1,lat1],[lng0,lat1],[lng0,lat0]]]
+    }
+  };
+}
+
+function refreshMapData(){
+  if(!map||!map.getSource('pixels')) return;
+  const features=Object.entries(pixelMap).map(([k,d])=>{
+    const [c,r]=k.split('_').map(Number);
+    return pixelToFeature(c,r,d);
+  });
+  map.getSource('pixels').setData({type:'FeatureCollection',features});
+  refreshHints();
+}
+
+function refreshHints(){
+  if(!map||!map.getSource('hints')) return;
+  if(energy<=0){map.getSource('hints').setData({type:'FeatureCollection',features:[]});return;}
+  const myPx=getMyPixels();
+  const hintSet=new Set();
+  myPx.forEach(({col,row})=>{
+    [[col-1,row],[col+1,row],[col,row-1],[col,row+1]].forEach(([c,r])=>{
+      if(c<0||c>=GRID_COLS||r<0||r>=GRID_ROWS) return;
+      const k=gridKey(c,r);
+      if(!pixelMap[k]||!pixelMap[k].uid) hintSet.add(k);
+    });
+  });
+  const features=[...hintSet].map(k=>{
+    const [c,r]=k.split('_').map(Number);
+    const lng0=KR.lngMin+c*LNG_STEP, lat0=KR.latMax-r*LAT_STEP;
+    const lng1=lng0+LNG_STEP, lat1=lat0-LAT_STEP;
+    return {type:'Feature',geometry:{type:'Polygon',coordinates:[[[lng0,lat0],[lng1,lat0],[lng1,lat1],[lng0,lat1],[lng0,lat0]]]}};
+  });
+  map.getSource('hints').setData({type:'FeatureCollection',features});
+}
+
+// ── LOAD VIEWPORT PIXELS ───────────────────────────────────
+let loadTimer=null;
+function loadViewportPixels(){
+  clearTimeout(loadTimer);
+  loadTimer=setTimeout(async()=>{
+    if(!map) return;
+    const bounds=map.getBounds();
+    const zoom=map.getZoom();
+    // 줌 낮으면 로드 안 함 (성능)
+    if(zoom<7){
+      // 줌 낮을 때는 기존 데이터만 표시
+      refreshMapData(); return;
+    }
+    const {col:c0,row:r0}=lnglatToGrid(bounds.getWest(),bounds.getNorth());
+    const {col:c1,row:r1}=lnglatToGrid(bounds.getEast(),bounds.getSouth());
+    const colMin=Math.max(0,c0-2), colMax=Math.min(GRID_COLS-1,c1+2);
+    const rowMin=Math.max(0,r0-2), rowMax=Math.min(GRID_ROWS-1,r1+2);
+
+    // 뷰포트가 너무 크면 스킵
+    if((colMax-colMin)*(rowMax-rowMin)>2000) { refreshMapData(); return; }
+
+    // Firestore에서 뷰포트 범위 픽셀 쿼리
+    // col/row 범위 쿼리 (복합 인덱스 필요 없는 단순 방식)
+    try {
+      const q=query(collection(db,'pixels'),
+        where('col','>=',colMin), where('col','<=',colMax)
+      );
+      const snap=await getDocs(q);
+      snap.forEach(d=>{
+        const data=d.data();
+        if(data.row>=rowMin&&data.row<=rowMax){
+          pixelMap[d.id]=data;
+          if(data.uid&&data.uid!==uid) colorMap[data.uid]=data.color||'#888';
+        }
+      });
+    } catch(e){}
+    refreshMapData();
+  }, 300);
+}
+
+// ── MAP CLICK ──────────────────────────────────────────────
+function handleMapClick(e){
+  const {col,row}=lnglatToGrid(e.lngLat.lng,e.lngLat.lat);
+  if(col<0||col>=GRID_COLS||row<0||row>=GRID_ROWS) return;
+  const key=gridKey(col,row);
+  const px=pixelMap[key];
+  selectedPixel={col,row,key,lng:e.lngLat.lng,lat:e.lngLat.lat};
+
+  document.getElementById('p-coord').textContent=`(${col}, ${row})`;
+  // 역지오코딩 간단히
+  document.getElementById('p-loc').textContent=`${e.lngLat.lat.toFixed(3)}°N ${e.lngLat.lng.toFixed(3)}°E`;
+
+  const isEv=px&&px.isEvent;
+  document.getElementById('p-ev-row').style.display=isEv?'flex':'none';
+  document.getElementById('p-speed').textContent=isEv?'0.02 pt/s':'0.01 pt/s';
+
+  const claimBtn=document.getElementById('popup-claim');
+  if(!px||!px.uid){
+    // 빈 땅
+    document.getElementById('p-owner').textContent='없음';
+    const canClaim=adjToMine(col,row)||getMyPixels().length===0;
+    claimBtn.style.display=canClaim&&energy>0?'block':'none';
+    claimBtn.textContent=`⚡ 이 땅 점령하기 (에너지 ${energy})`;
+  } else if(px.uid===uid){
+    document.getElementById('p-owner').textContent='나';
+    claimBtn.style.display='none';
+  } else {
+    document.getElementById('p-owner').textContent=nickMap[px.uid]||px.uid.slice(0,8);
+    claimBtn.style.display='none';
+  }
+  document.getElementById('popup-wrap').classList.add('open');
+}
+
+document.getElementById('popup-claim').addEventListener('click', async()=>{
+  if(!selectedPixel) return;
+  document.getElementById('popup-wrap').classList.remove('open');
+  await claimPixel(selectedPixel.col, selectedPixel.row);
+});
+document.getElementById('popup-close').addEventListener('click',()=>document.getElementById('popup-wrap').classList.remove('open'));
+document.getElementById('popup-wrap').addEventListener('click',e=>{if(e.target===document.getElementById('popup-wrap'))document.getElementById('popup-wrap').classList.remove('open');});
+
+// ── CLAIM PIXEL ────────────────────────────────────────────
+async function claimPixel(col,row){
+  const key=gridKey(col,row);
+  const px=pixelMap[key];
+  if(px&&px.uid){ toast('이미 주인이 있는 영토입니다.'); return; }
+  if(energy<1){ toast('에너지가 부족해요! ⚡'); return; }
+  if(getMyPixels().length>0&&!adjToMine(col,row)){ toast('내 영토와 인접한 칸만 확장 가능합니다.'); return; }
+
+  const isEv=px&&px.isEvent;
+  // optimistic
+  pixelMap[key]={uid, color:activeSkin||userColor, isEvent:!!isEv, col, row};
+  energy--;
+  refreshMapData(); updateHUD();
+
+  try {
+    const batch=writeBatch(db);
+    batch.set(doc(db,'pixels',key),{
+      uid, color:activeSkin||userColor, isEvent:!!isEv,
+      col, row, updatedAt:serverTimestamp()
+    });
+    batch.update(doc(db,'users',uid),{energy:increment(-1),territory:increment(1)});
+    await batch.commit();
+
+    if(isEv) toast('이벤트 존 점령! 채굴 2배 🎉');
+    else toast(`(${col},${row}) 점령 성공!`);
+    addFeed(`(${col},${row}) 좌표를 점령했습니다.${isEv?' 이벤트 존!':''}`, userColor);
+    // global feed
+    await setDoc(doc(collection(db,'feed')),{
+      uid, displayName:auth.currentUser?.displayName||'플레이어',
+      text:`(${col},${row}) 좌표를 점령했습니다.${isEv?' 이벤트 존!':''}`,
+      color:userColor, createdAt:serverTimestamp()
+    });
+    refreshHints();
+  } catch(err){
+    delete pixelMap[key]; energy++;
+    refreshMapData(); updateHUD();
+    toast('오류: '+err.message);
+  }
+}
+
+// ── HELPERS ────────────────────────────────────────────────
+function getMyPixels(){
+  return Object.values(pixelMap).filter(p=>p.uid===uid);
+}
+function adjToMine(col,row){
+  return [[col-1,row],[col+1,row],[col,row-1],[col,row+1]].some(([c,r])=>{
+    const k=gridKey(c,r);
+    return pixelMap[k]&&pixelMap[k].uid===uid;
+  });
+}
+
+// ── MAP BUTTONS ────────────────────────────────────────────
+document.getElementById('btn-my-loc').addEventListener('click',()=>{
+  const my=getMyPixels();
+  if(!my.length){ toast('아직 영토가 없어요.'); return; }
+  const [lng,lat]=gridToLnglat(my[0].col,my[0].row);
+  map.flyTo({center:[lng,lat],zoom:11,duration:800});
+});
+document.getElementById('btn-korea').addEventListener('click',()=>{
+  map.flyTo({center:[127.5,36.0],zoom:6,duration:800});
+});
+
+// ── HUD ────────────────────────────────────────────────────
+function updateHUD(){
+  const my=getMyPixels();
+  const terr=my.length;
+  const evCnt=my.filter(p=>p.isEvent).length;
+  const speed=((terr-evCnt)*0.01+evCnt*0.02);
+  document.getElementById('s-terr').textContent=terr;
+  document.getElementById('s-nrg').textContent=energy;
+  document.getElementById('s-pts').textContent=points.toFixed(2);
+  document.getElementById('si-terr').textContent=terr+' 칸';
+  document.getElementById('si-ev').textContent=evCnt+' 칸';
+  document.getElementById('si-speed').textContent=speed.toFixed(2)+' pt/s';
+  document.getElementById('si-pend').textContent=pending.toFixed(2);
+  document.getElementById('pr-terr').textContent=terr+' 블록';
+  document.getElementById('pr-pts').textContent=points.toFixed(2);
+  document.getElementById('pr-mined').textContent=totalMined.toFixed(2);
+  document.getElementById('pr-streak').textContent=streak+'일';
+}
+
+// ── MINING ─────────────────────────────────────────────────
+function startMining(){
+  setInterval(async()=>{
+    const my=getMyPixels();
+    if(!my.length) return;
+    const evCnt=my.filter(p=>p.isEvent).length;
+    const gain=(((my.length-evCnt)*0.01+evCnt*0.02)/60);
+    pending+=gain;
+    if(pending>=0.5){
+      const add=parseFloat(pending.toFixed(2));
+      pending=0;
+      await updateDoc(doc(db,'users',uid),{
+        points:increment(add), totalMined:increment(add),
+        pending:0, territory:my.length
+      });
+    }
+    updateHUD();
+  },1000);
+
+  // 글로벌 피드 리스너
+  const feedQ=query(collection(db,'feed'),orderBy('createdAt','desc'),limit(20));
+  onSnapshot(feedQ,snap=>{
+    snap.docChanges().forEach(ch=>{
+      if(ch.type==='added'){
+        const d=ch.doc.data();
+        if(d.uid&&d.uid!==uid) addFeed((d.displayName||'누군가')+'님: '+d.text, d.color||'#888');
+      }
+    });
+  });
+}
+
+// ── COLLECT ───────────────────────────────────────────────
+document.getElementById('btn-collect').addEventListener('click',async()=>{
+  if(pending<0.01){toast('수령할 포인트가 없어요.');return;}
+  const add=parseFloat(pending.toFixed(2));
+  pending=0;
+  await updateDoc(doc(db,'users',uid),{points:increment(add),totalMined:increment(add),pending:0});
+  toast(`🪙 ${add.toFixed(2)} pt 수령!`);
+  addFeed(`${add.toFixed(2)} pt 수령`, '#c8f542');
+});
+
+// ── CHECKIN ───────────────────────────────────────────────
+document.getElementById('btn-checkin').addEventListener('click',async()=>{
+  const now=Date.now();
+  if(now-lastCheckin<5000){toast('잠시 후 다시 (데모: 5초)');return;}
+  lastCheckin=now;
+  await updateDoc(doc(db,'users',uid),{energy:increment(1),streak:increment(1),lastCheckin:now});
+  toast('출석 완료! ⚡ +1');
+  addFeed('출석 체크 — 에너지 +1','#c8f542');
+  refreshHints();
+});
+
+// ── LEADERBOARD ───────────────────────────────────────────
+function renderLeaderboard(rows){
+  document.getElementById('leaderboard').innerHTML=rows.map((r,i)=>`
+    <div class="rank-row">
+      <span class="rank-num">${i+1}</span>
+      <span class="rank-dot" style="background:${r.color||colorMap[r.uid]||'#888'}"></span>
+      <span class="rank-name ${r.uid===uid?'me':''}">${r.uid===uid?'나':r.displayName||'—'}</span>
+      <span class="rank-score">${r.territory||0}</span>
+    </div>`).join('');
+}
+
+// ── SHOP ──────────────────────────────────────────────────
+function buildShop(){
+  const body=document.getElementById('shop-body');
+  body.innerHTML='<div class="section-title">기프티콘 교환</div>';
+  GIFTS.forEach(g=>{
+    const d=document.createElement('div');d.className='shop-item';
+    d.innerHTML=`<div class="shop-item-head"><span class="shop-item-name">${g.n}</span><span class="shop-price">${g.p.toLocaleString()} pt</span></div><div class="shop-desc">${g.d}</div><button class="shop-btn" onclick="buyGift(${g.p},'${g.n}')">교환하기</button>`;
+    body.appendChild(d);
+  });
+  const sk=document.createElement('div');
+  sk.innerHTML='<div class="section-title" style="margin-top:12px">한정판 스킨</div>';
+  SKINS.forEach((s,i)=>{
+    const owned=ownedSkins.has(i);
+    const d=document.createElement('div');d.className='shop-item';
+    d.innerHTML=`<div class="skin-prev" style="background:${s.c}"></div><div class="shop-item-head"><span class="shop-item-name">${s.n}</span><span class="shop-price">${s.p} pt</span></div><button class="shop-btn ${owned?'owned':''}" id="skin-btn-${i}" onclick="buySkin(${i},'${s.c}',${s.p})">${owned?'적용하기':'구매하기'}</button>`;
+    sk.appendChild(d);
+  });
+  body.appendChild(sk);
+}
+window.buyGift=async(p,n)=>{
+  if(points<p){toast(`포인트 부족 (${p} pt 필요)`);return;}
+  await updateDoc(doc(db,'users',uid),{points:increment(-p)});
+  toast(`${n} 교환 완료 🎉`);
+};
+window.buySkin=async(i,c,p)=>{
+  if(ownedSkins.has(i)){
+    activeSkin=activeSkin===c?null:c;
+    await updateDoc(doc(db,'users',uid),{activeSkin:activeSkin||null});
+    toast(activeSkin?`스킨 적용: ${SKINS[i].n}`:'기본 컬러');
+    refreshMapData();return;
+  }
+  if(points<p){toast(`포인트 부족 (${p} pt 필요)`);return;}
+  ownedSkins.add(i);
+  await updateDoc(doc(db,'users',uid),{points:increment(-p),ownedSkins:[...ownedSkins],activeSkin:c});
+  activeSkin=c; buildShop(); toast(`스킨 구매: ${SKINS[i].n} 🎨`);
+  refreshMapData();
+};
+
+// ── COLOR PICKER ──────────────────────────────────────────
+function buildColorPicker(){
+  const el=document.getElementById('color-grid');
+  PALETTE.forEach(p=>{
+    const d=document.createElement('div');
+    d.className='color-opt'+(p.c===userColor?' sel':'');
+    d.style.background=p.c; d.title=p.n;
+    d.addEventListener('click',async()=>{
+      userColor=p.c; activeSkin=null; colorMap[uid]=p.c;
+      document.querySelectorAll('.color-opt').forEach(e=>e.classList.remove('sel'));
+      d.classList.add('sel');
+      await updateDoc(doc(db,'users',uid),{color:p.c,activeSkin:null});
+      toast(`컬러: ${p.n}`); refreshMapData();
+    });
+    el.appendChild(d);
+  });
+}
+
+// ── FEED ──────────────────────────────────────────────────
+function addFeed(text,color){
+  const now=new Date();
+  const t=`${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+  feed.unshift({text,color,t});
+  if(feed.length>50)feed.pop();
+  const el=document.getElementById('feed-body');
+  el.innerHTML=feed.map(f=>`<div class="feed-item"><div class="feed-dot" style="background:${f.color}"></div><div><div class="feed-text">${f.text}</div><div class="feed-time">${f.t}</div></div></div>`).join('');
+}
+
+// ── NAV ───────────────────────────────────────────────────
+document.querySelectorAll('.nav-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.sidebar-tab').forEach(t=>t.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-'+btn.dataset.tab).classList.add('active');
+  });
+});
+
+// ── TOAST ─────────────────────────────────────────────────
+let toastT;
+function toast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  clearTimeout(toastT);
+  toastT=setTimeout(()=>t.classList.remove('show'),2500);
+}
+
+// ── 앱인토스 SDK ───────────────────────────────────────────
+// 앱인토스 환경 감지 및 SDK 초기화
+(function initAppsInToss(){
+  // 앱인토스 SDK는 토스 앱 내에서 자동으로 주입됨
+  // window.TossSDK 또는 window.toss 객체로 접근
+  if(typeof window.TossPayments !== 'undefined' || 
+     typeof window.toss !== 'undefined' ||
+     navigator.userAgent.includes('TossApp')){
+    
+    // 토스 앱 내 실행 감지
+    console.log('[GRID] 앱인토스 환경 감지');
+    
+    // 뒤로가기 핸들링
+    if(window.toss && window.toss.onBackPressed){
+      window.toss.onBackPressed(()=>{
+        const popup=document.getElementById('popup-wrap');
+        if(popup.classList.contains('open')){ popup.classList.remove('open'); return; }
+        window.toss.close();
+      });
+    }
+
+    // 앱인토스 광고 초기화 (인앱 광고 수익화)
+    // SDK 키는 앱인토스 콘솔에서 발급받은 후 아래에 입력
+    const AIT_APP_ID = 'YOUR_AIT_APP_ID'; // 앱인토스 콘솔에서 발급
+    if(window.AdsInToss && AIT_APP_ID !== 'YOUR_AIT_APP_ID'){
+      window.AdsInToss.initialize({appId: AIT_APP_ID});
+      // 전면 광고 (출석 체크 시 노출)
+      window.AdsInToss.loadInterstitial({
+        adUnitId: AIT_APP_ID+'_interstitial',
+        onLoaded:()=>{ console.log('[AIT] 광고 로드 완료'); }
+      });
+    }
+
+    // 공유 리워드 (바이럴 구조)
+    window.shareGrid = function(){
+      if(window.toss && window.toss.share){
+        window.toss.share({
+          title:'GRID — 대한민국 픽셀 부동산',
+          description:`나는 이미 ${getMyPixels().length}칸을 점령했어요! 당신도 땅을 차지해보세요.`,
+          imageUrl:'https://naeyou655.github.io/grid-game/og.png',
+          link:'https://naeyou655.github.io/grid-game'
+        });
+      }
+    };
+  }
+})();
+
+// 출석 체크 시 광고 노출 (앱인토스)
+const origCheckin = document.getElementById('btn-checkin').onclick;
+document.getElementById('btn-checkin').addEventListener('click',()=>{
+  if(window.AdsInToss && window.AdsInToss.showInterstitial){
+    window.AdsInToss.showInterstitial({
+      adUnitId:'YOUR_AIT_APP_ID_interstitial',
+      onClosed:()=>{ /* 광고 닫힌 후 처리 */ }
+    });
+  }
+});
+
+</script>
+</body>
+</html>
