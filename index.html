@@ -283,10 +283,10 @@ mapboxgl.accessToken = 'pk.eyJ1Ijoic3Ryb25nNzExNyIsImEiOiJjbXBuZjRlOXUwZDlqMnhwb
 
 // ── GRID CONSTANTS ─────────────────────────────────────────
 // 대한민국 경계 (1km×1km 그리드)
-const KR = { latMin:33.0, latMax:38.9, lngMin:125.0, lngMax:130.0 };
+const KR = { latMin:33.0, latMax:38.9, lngMin:124.5, lngMax:132.5 }; // 독도/울릉도 포함
 const LAT_STEP = (KR.latMax - KR.latMin) / 654; // ~0.009도 ≈ 1km
-const LNG_STEP = (KR.lngMax - KR.lngMin) / 449; // ~0.011도 ≈ 1km
-const GRID_ROWS = 654, GRID_COLS = 449;
+const LNG_STEP = (KR.lngMax - KR.lngMin) / 719; // ~0.011도 ≈ 1km (독도/울릉도 포함)
+const GRID_ROWS = 654, GRID_COLS = 719;
 
 // 위경도 → 그리드 좌표
 function lnglatToGrid(lng, lat) {
@@ -575,7 +575,7 @@ async function isInSouthKorea(lng, lat){
   // 기본 bbox 체크 (북한 위도 37.7 이상 제외, 대략적)
   if(lat > 38.6) return false; // 북한 영역
   if(lat < 33.0 || lat > 38.7) return false;
-  if(lng < 124.5 || lng > 130.5) return false;
+  if(lng < 124.5 || lng > 132.5) return false; // 독도(131.9°E), 울릉도(131.8°E) 포함
   // Mapbox Geocoding으로 정확한 국가 확인
   try {
     const res = await fetch(
